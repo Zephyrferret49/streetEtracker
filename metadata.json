@@ -1,0 +1,5 @@
+{
+  "name": "Street Contact Dashboard",
+  "description": "A contact management system with Telegram bot integration, Kanban board, and Google Sheets sync.",
+  "requestFramePermissions": []
+}
