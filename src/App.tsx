@@ -1,20 +1,16 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { HelpCircle, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { COLUMNS, DEPRECATED_STATUS } from "./constants";
-import { Contact } from "./types";
-import { Header } from "./components/Header";
-import { Toolbar } from "./components/Toolbar";
-import { StatsBar } from "./components/StatsBar";
-import { Column } from "./components/Column";
-import { ContactModal } from "./components/ContactModal";
-import { ConfirmationModal } from "./components/ConfirmationModal";
-import { useContacts } from "./hooks/useContacts";
-import {
-  getLocalDateString,
-  isSameDay,
-  filterContactsByColumn,
-} from "./lib/utils";
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { HelpCircle, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { COLUMNS, DEPRECATED_STATUS } from './constants';
+import { Contact } from './types';
+import { Header } from './components/Header';
+import { Toolbar } from './components/Toolbar';
+import { StatsBar } from './components/StatsBar';
+import { Column } from './components/Column';
+import { ContactModal } from './components/ContactModal';
+import { ConfirmationModal } from './components/ConfirmationModal';
+import { useContacts } from './hooks/useContacts';
+import { getLocalDateString, isSameDay, filterContactsByColumn, getHighestStatus } from './lib/utils';
 
 export default function App() {
   const {
@@ -31,113 +27,100 @@ export default function App() {
 
   const [isAdding, setIsAdding] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [teamFilter, setTeamFilter] = useState("");
-  const [selectedDate, setSelectedDate] =
-    useState<string>(getLocalDateString());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [teamFilter, setTeamFilter] = useState('');
+  const [selectedDate, setSelectedDate] = useState<string>(getLocalDateString());
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showReadme, setShowReadme] = useState(false);
-  const [readmeContent, setReadmeContent] = useState<string>("");
+  const [readmeContent, setReadmeContent] = useState<string>('');
 
   useEffect(() => {
     if (showReadme && !readmeContent) {
-      fetch("/api/readme")
-        .then((res) => res.json())
-        .then((data) => setReadmeContent(data.content || "No content found."))
-        .catch((err) => {
-          console.error("Failed to load README.TXT:", err);
-          setReadmeContent("Failed to load README.TXT");
+      fetch('/api/readme')
+        .then(res => res.json())
+        .then(data => setReadmeContent(data.content || 'No content found.'))
+        .catch(err => {
+          console.error('Failed to load README.TXT:', err);
+          setReadmeContent('Failed to load README.TXT');
         });
     }
   }, [showReadme, readmeContent]);
 
   const dailyCounts = useMemo(() => {
-    if (!selectedDate)
-      return COLUMNS.reduce(
-        (acc, col) => {
-          acc[col] = 0;
-          return acc;
-        },
-        {} as Record<string, number>,
-      );
+    if (!selectedDate) return COLUMNS.reduce((acc, col) => { acc[col] = 0; return acc; }, {} as Record<string, number>);
 
-    return COLUMNS.reduce(
-      (acc, col) => {
-        const colId = col.toLowerCase();
+    return COLUMNS.reduce((acc, col) => {
+      const colId = col.toLowerCase();
+      
+      acc[col] = contacts.filter(c => {
+        if (!isSameDay(c.updatedAt, selectedDate)) return false;
+        
+        const statuses = Array.isArray(c.status) ? c.status : [c.status];
+        const isDeprecated = statuses.some(s => s.toLowerCase().trim() === 'deprecated');
+        
+        // Special logic for 'convo' stat: sum total of all entries for the day (excluding deprecated)
+        if (colId === 'convo') {
+          return !isDeprecated;
+        }
 
-        acc[col] = contacts.filter((c) => {
-          if (!isSameDay(c.updatedAt, selectedDate)) return false;
-
-          const status = c.status?.toLowerCase().trim();
-
-          // Special logic for 'convo' stat: sum total of all entries for the day (excluding deprecated)
-          if (colId === "convo") {
-            return status !== "deprecated";
-          }
-
-          // For all other stages (pray, gospel, contact, salvation),
-          // count them regardless of high priority status, as long as they are not deprecated
-          return status === colId;
-        }).length;
-        return acc;
-      },
-      {} as Record<string, number>,
-    );
+        // For all other stages (pray, gospel, contact, salvation), 
+        // count them if they are the highest status and not deprecated
+        const highestStatus = getHighestStatus(c.status).toLowerCase().trim();
+        return highestStatus === colId && !isDeprecated;
+      }).length;
+      return acc;
+    }, {} as Record<string, number>);
   }, [contacts, selectedDate]);
 
-  const saveContact = useCallback(
-    async (e: React.FormEvent<HTMLFormElement>) => {
-      e.preventDefault();
-      if (isSaving) return;
+  const saveContact = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (isSaving) return;
+    
+    setIsSaving(true);
+    try {
+      const formData = new FormData(e.currentTarget);
+      const data: any = Object.fromEntries(formData.entries());
+      
+      // Collect all checked statuses
+      const statuses = formData.getAll('status') as string[];
+      data.status = statuses.length > 0 ? statuses : ['convo'];
+      
+      // Derive highPriority from status array
+      data.highPriority = data.status.includes('high-priority');
 
-      setIsSaving(true);
-      try {
-        const formData = new FormData(e.currentTarget);
-        const data: any = Object.fromEntries(formData.entries());
+      const method = editingContact ? 'PUT' : 'POST';
+      const url = editingContact ? `/api/contacts/${editingContact.id}` : '/api/contacts';
+      
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
 
-        // Checkboxes are only present in FormData if checked
-        data.highPriority = formData.get("highPriority") === "on";
-
-        const method = editingContact ? "PUT" : "POST";
-        const url = editingContact
-          ? `/api/contacts/${editingContact.id}`
-          : "/api/contacts";
-
-        const res = await fetch(url, {
-          method,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
-        });
-
-        if (res.ok) {
-          fetchContacts();
-          setIsAdding(false);
-          setEditingContact(null);
-        }
-      } catch (error) {
-        console.error("Failed to save contact:", error);
-      } finally {
-        setIsSaving(false);
+      if (res.ok) {
+        fetchContacts();
+        setIsAdding(false);
+        setEditingContact(null);
       }
-    },
-    [isSaving, editingContact, fetchContacts],
-  );
+    } catch (error) {
+      console.error('Failed to save contact:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [isSaving, editingContact, fetchContacts]);
 
   const filteredContacts = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
-
-    return contacts.filter((c) => {
+    
+    return contacts.filter(c => {
       // Date filter logic
       if (selectedDate && !isSameDay(c.updatedAt, selectedDate)) {
         return false;
       }
 
       // Team filter logic
-      if (
-        teamFilter &&
-        c.teamMember?.toLowerCase() !== teamFilter.toLowerCase()
-      ) {
+      if (teamFilter && c.teamMember?.toLowerCase() !== teamFilter.toLowerCase()) {
         return false;
       }
 
@@ -145,20 +128,15 @@ export default function App() {
 
       const date = new Date(c.updatedAt);
       const formattedDate = date.toLocaleDateString().toLowerCase();
-      const formattedTime = date
-        .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        .toLowerCase();
-      const monthName = date
-        .toLocaleString("default", { month: "long" })
-        .toLowerCase();
-      const monthShort = date
-        .toLocaleString("default", { month: "short" })
-        .toLowerCase();
-
+      const formattedTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase();
+      const monthName = date.toLocaleString('default', { month: 'long' }).toLowerCase();
+      const monthShort = date.toLocaleString('default', { month: 'short' }).toLowerCase();
+      
       return (
         c.name.toLowerCase().includes(query) ||
         c.occupation.toLowerCase().includes(query) ||
         c.remarks.toLowerCase().includes(query) ||
+        c.status.some(s => s.toLowerCase().includes(query)) ||
         c.updatedAt.toLowerCase().includes(query) ||
         formattedDate.includes(query) ||
         formattedTime.includes(query) ||
@@ -173,7 +151,7 @@ export default function App() {
       <Header isSyncing={isSyncing} onShowReadme={() => setShowReadme(true)} />
 
       <main className="max-w-full mx-auto px-6 py-8">
-        <Toolbar
+        <Toolbar 
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           teamFilter={teamFilter}
@@ -186,11 +164,10 @@ export default function App() {
           lastSynced={lastSynced}
           onClearClick={() => setIsConfirmingClear(true)}
           isClearing={isClearing}
-          deprecatedCount={
-            contacts.filter(
-              (c) => c.status?.toLowerCase().trim() === "deprecated",
-            ).length
-          }
+          deprecatedCount={contacts.filter(c => {
+            const statuses = Array.isArray(c.status) ? c.status : [c.status];
+            return statuses.some(s => s.toLowerCase().trim() === 'deprecated');
+          }).length}
           onAddClick={() => setIsAdding(true)}
         />
 
@@ -214,7 +191,7 @@ export default function App() {
         </div>
       </main>
 
-      <ContactModal
+      <ContactModal 
         isOpen={isAdding}
         onClose={() => {
           setIsAdding(false);
@@ -225,7 +202,7 @@ export default function App() {
         isSaving={isSaving}
       />
 
-      <ConfirmationModal
+      <ConfirmationModal 
         isOpen={isConfirmingClear}
         onClose={() => setIsConfirmingClear(false)}
         onConfirm={clearDeprecated}
@@ -255,14 +232,10 @@ export default function App() {
             >
               <div className="p-6 border-b border-[#141414]/5 flex items-center justify-between bg-[#141414]/2 shrink-0">
                 <div>
-                  <h2 className="text-lg font-medium text-[#141414]">
-                    Documentation
-                  </h2>
-                  <p className="text-xs text-[#141414]/40 uppercase tracking-wider font-medium">
-                    System Updates & Info
-                  </p>
+                  <h2 className="text-lg font-medium text-[#141414]">Documentation</h2>
+                  <p className="text-xs text-[#141414]/40 uppercase tracking-wider font-medium">System Updates & Info</p>
                 </div>
-                <button
+                <button 
                   onClick={() => setShowReadme(false)}
                   className="p-2 hover:bg-[#141414]/5 rounded-full transition-colors"
                 >
@@ -271,7 +244,7 @@ export default function App() {
               </div>
               <div className="p-6 overflow-y-auto flex-1">
                 <pre className="text-sm text-[#141414]/70 whitespace-pre-wrap font-mono leading-relaxed">
-                  {readmeContent || "Loading..."}
+                  {readmeContent || 'Loading...'}
                 </pre>
               </div>
               <div className="p-4 bg-[#141414]/2 border-t border-[#141414]/5 flex justify-end shrink-0">

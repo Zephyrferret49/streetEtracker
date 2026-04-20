@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: contacts
+    // Document ID: {contactId}
+    // Fields:
+    //   - id: string (required) - Unique identifier
+    //   - name: string (required, max 100) - Full name
+    //   - gender: string (max 20)
+    //   - teamMember: string (max 100)
+    //   - age: string (max 50)
+    //   - remarks: string (max 2000)
+    //   - occupation: string (max 100)
+    //   - status: list (required, max 10 items, each max 50 chars)
+    //   - updatedAt: string (required, ISO 8601)
+    //   - highPriority: bool
+    //   - socialMedia: string (max 200)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "KennyTankw93@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidString(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    function isValidOptionalString(data, field, maxLen) {
+      return !(field in data) || isValidString(data[field], maxLen);
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function isValidStatusList(statusList) {
+      return statusList is list && statusList.size() <= 10;
+    }
+
+    function isValidContact(data) {
+      return data.keys().hasAll(['id', 'name', 'status', 'updatedAt']) &&
+             isValidString(data.id, 100) &&
+             isValidString(data.name, 100) &&
+             isValidStatusList(data.status) &&
+             isValidDateString(data.updatedAt) &&
+             isValidOptionalString(data, 'gender', 20) &&
+             isValidOptionalString(data, 'teamMember', 100) &&
+             isValidOptionalString(data, 'age', 50) &&
+             isValidOptionalString(data, 'remarks', 2000) &&
+             isValidOptionalString(data, 'occupation', 100) &&
+             isValidOptionalString(data, 'socialMedia', 200) &&
+             (!('highPriority' in data) || data.highPriority is bool);
+    }
+
+    match /contacts/{contactId} {
+      // For now, allowing authenticated users to read/write to enable syncing and dashboard usage.
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidContact(request.resource.data);
+      allow update: if isAuthenticated() && isValidContact(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+  }
+}

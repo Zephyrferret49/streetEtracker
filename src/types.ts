@@ -6,7 +6,7 @@ export interface Contact {
   age: string;
   remarks: string;
   occupation: string;
-  status: string;
+  status: string[];
   updatedAt: string;
   highPriority: boolean;
   socialMedia: string;

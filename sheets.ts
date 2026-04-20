@@ -6,10 +6,7 @@ import { STAGES } from "./src/constants.js";
 dotenv.config();
 
 // Fallback to .env.example if .env is not present or if critical variables are missing
-if (
-  (!process.env.GOOGLE_SHEET_ID || process.env.GOOGLE_SHEET_ID.trim() === "") &&
-  fs.existsSync(".env.example")
-) {
+if ((!process.env.GOOGLE_SHEET_ID || process.env.GOOGLE_SHEET_ID.trim() === "") && fs.existsSync(".env.example")) {
   dotenv.config({ path: ".env.example", override: true });
 }
 
@@ -39,6 +36,8 @@ export const COL_INDICES = {
 
 export function formatContactRow(id: string, data: any) {
   const updatedAt = data.updatedAt || new Date().toISOString();
+  const statusString = Array.isArray(data.status) ? data.status.join(', ') : (data.status || STAGES[0]);
+  
   return [
     id,
     data.name || "-",
@@ -47,7 +46,7 @@ export function formatContactRow(id: string, data: any) {
     data.age || "-",
     data.remarks || "-",
     data.occupation || "-",
-    data.status || STAGES[0],
+    statusString,
     updatedAt,
     data.highPriority ? "TRUE" : "FALSE",
     data.socialMedia || "-",
@@ -84,8 +83,7 @@ function triggerUpdate() {
 }
 
 async function getSheetMetadata() {
-  if (cachedSheetName && cachedSheetId !== null)
-    return { name: cachedSheetName, id: cachedSheetId };
+  if (cachedSheetName && cachedSheetId !== null) return { name: cachedSheetName, id: cachedSheetId };
   if (!SPREADSHEET_ID) {
     return { name: "Sheet1", id: 0 };
   }
@@ -162,11 +160,9 @@ export async function updateSheetRow(id: string, row: any[]) {
   if (!SPREADSHEET_ID) return;
   const sheetName = await getSheetName();
   const data = await getSheetData();
-
-  const rowIndex = data.findIndex(
-    (r) => String(r[0]).trim() === String(id).trim(),
-  );
-
+  
+  const rowIndex = data.findIndex((r) => String(r[0]).trim() === String(id).trim());
+  
   if (rowIndex === -1) {
     throw new Error(`Contact with ID ${id} not found`);
   }
@@ -186,14 +182,12 @@ export async function deleteSheetRow(id: string) {
   if (!SPREADSHEET_ID) return;
   const sheetName = await getSheetName();
   const data = await getSheetData();
-  const rowIndex = data.findIndex(
-    (r) => String(r[0]).trim() === String(id).trim(),
-  );
+  const rowIndex = data.findIndex((r) => String(r[0]).trim() === String(id).trim());
   if (rowIndex === -1) return;
 
   const row = [...data[rowIndex]];
-  row[7] = "deprecated";
-  row[8] = new Date().toISOString();
+  row[7] = "deprecated"; 
+  row[8] = new Date().toISOString(); 
 
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
@@ -210,22 +204,22 @@ export async function clearDeprecatedRows() {
   if (!SPREADSHEET_ID) return;
   const data = await getSheetData();
   const sheetId = await getSheetId();
-
+  
   const rowsToDelete = data
     .map((row, index) => ({ status: row[7], index }))
-    .filter((item) => item.status === "deprecated")
-    .map((item) => item.index)
+    .filter(item => item.status === 'deprecated')
+    .map(item => item.index)
     .sort((a, b) => b - a);
 
   if (rowsToDelete.length === 0) return;
 
   try {
-    const requests = rowsToDelete.map((index) => ({
+    const requests = rowsToDelete.map(index => ({
       deleteDimension: {
         range: {
           sheetId: sheetId,
           dimension: "ROWS",
-          startIndex: index + 1,
+          startIndex: index + 1, 
           endIndex: index + 2,
         },
       },

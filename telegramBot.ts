@@ -11,29 +11,36 @@ interface MyContext extends Context {
   session: MySession;
 }
 
-export const WEBHOOK_PATH = process.env.TELEGRAM_BOT_TOKEN
+export const WEBHOOK_PATH = process.env.TELEGRAM_BOT_TOKEN 
   ? `/telegraf-webhook-${process.env.TELEGRAM_BOT_TOKEN.substring(0, 8)}`
   : "/telegraf-webhook-default";
 
 // Helper to normalize status input
-function normalizeStatus(input: string): string {
+function normalizeStatus(input: string): string[] {
   const lower = input.toLowerCase().trim();
-  if (lower.includes("convo")) return "convo";
-  if (lower.includes("pray")) return "pray";
-  if (lower.includes("gospel")) return "gospel";
-  if (lower.includes("exchange") || lower.includes("contact")) return "contact";
-  if (lower.includes("salvation")) return "salvation";
-
-  // Fallback to checking if it matches any defined stage
-  const matched = STAGES.find((s) => lower.includes(s.toLowerCase()));
-  return matched || STAGES[0];
+  const results: string[] = [];
+  
+  if (lower.includes("convo")) results.push("convo");
+  if (lower.includes("pray")) results.push("pray");
+  if (lower.includes("gospel")) results.push("gospel");
+  if (lower.includes("exchange") || lower.includes("contact")) results.push("contact");
+  if (lower.includes("salvation")) results.push("salvation");
+  if (lower.includes("high priority") || lower.includes("urgent")) results.push("high-priority");
+  
+  // Fallback to checking if it matches any defined stage if nothing found yet
+  if (results.length === 0) {
+    const matched = STAGES.find(s => lower.includes(s.toLowerCase()));
+    if (matched) results.push(matched);
+  }
+  
+  return results.length > 0 ? results : [STAGES[0]];
 }
 
-// Greedy comma-based parser: treats the first 7 commas as delimiters,
+// Greedy comma-based parser: treats the first 7 commas as delimiters, 
 // and everything after the 7th comma as the final "remarks" field.
 function parseCommaSeparated(text: string) {
-  const parts: string[] = text.split(",").map((p) => p.trim());
-
+  const parts: string[] = text.split(",").map(p => p.trim());
+  
   let name = parts[0] || "-";
   let gender = parts[1] || "-";
   let teamMember = parts[2] || "-";
@@ -47,11 +54,10 @@ function parseCommaSeparated(text: string) {
   // If we have at least 7 parts, the 7th part (index 6) is High Priority
   if (parts.length >= 7) {
     const highPriorityText = parts[6].toLowerCase();
-    highPriority =
-      highPriorityText === "yes" ||
-      highPriorityText === "true" ||
-      highPriorityText === "y" ||
-      highPriorityText === "high priority";
+    highPriority = highPriorityText === "yes" || highPriorityText === "true" || highPriorityText === "y" || highPriorityText === "high priority";
+    if (highPriority && !status.includes('high-priority')) {
+      status.push('high-priority');
+    }
   }
 
   // If we have at least 8 parts, the 8th part is Social Media
@@ -83,14 +89,10 @@ export function getBot() {
   if (botInstance) return botInstance;
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token || token.trim() === "") {
-    console.warn(
-      "TELEGRAM_BOT_TOKEN is missing. Telegram functionality will be disabled.",
-    );
+    console.warn("TELEGRAM_BOT_TOKEN is missing. Telegram functionality will be disabled.");
     return null;
   }
-  console.log(
-    `Initializing Telegram bot with token prefix: ${token.substring(0, 8)}`,
-  );
+  console.log(`Initializing Telegram bot with token prefix: ${token.substring(0, 8)}`);
   try {
     botInstance = new Telegraf<MyContext>(token);
     botInstance.use(session());
@@ -106,9 +108,7 @@ export function getBot() {
 function setupBotLogic(bot: Telegraf<MyContext>) {
   // Global middleware for logging
   bot.use((ctx, next) => {
-    console.log(
-      `Telegram update received: ${JSON.stringify(ctx.update, null, 2)}`,
-    );
+    console.log(`Telegram update received: ${JSON.stringify(ctx.update, null, 2)}`);
     return next();
   });
 
@@ -121,21 +121,15 @@ function setupBotLogic(bot: Telegraf<MyContext>) {
   });
 
   bot.start((ctx) => {
-    ctx.reply(
-      `Welcome! Send me a message like 'John Doe, Male, Team A, 30, Engineer, convo, no, @johndoe, Friendly and loves coffee' or type /new to start step-by-step.\n\nStatus options: convo, pray, gospel, exchange contact, salvation.`,
-    );
+    ctx.reply(`Welcome! Send me a message like 'John Doe, Male, Team A, 30, Engineer, convo, no, @johndoe, Friendly and loves coffee' or type /new to start step-by-step.\n\nStatus options: convo, pray, gospel, exchange contact, salvation.`);
   });
 
   bot.command("version", (ctx) => {
-    ctx.reply(
-      "Bot Version: 1.1.1 (Name, Gender, Team Member, Age, Occupation, Status, High Priority, Social Media, Remarks)",
-    );
+    ctx.reply("Bot Version: 1.4.0 (Name, Gender, Team Member, Age, Occupation, Status, High Priority, Social Media, Remarks)");
   });
 
   bot.command("ping", (ctx) => {
-    ctx.reply(
-      `Pong! Bot is alive. \nInstance: ${process.env.K_SERVICE || "unknown"}\nRevision: ${process.env.K_REVISION || "unknown"}`,
-    );
+    ctx.reply(`Pong! Bot is alive. \nInstance: ${process.env.K_SERVICE || "unknown"}\nRevision: ${process.env.K_REVISION || "unknown"}`);
   });
 
   bot.command("new", (ctx) => {
@@ -157,9 +151,7 @@ function setupBotLogic(bot: Telegraf<MyContext>) {
     // Ignore commands in general text handler
     if (text.startsWith("/")) return;
 
-    console.log(
-      `Bot received text: "${text}" (Step: ${session.step || "none"})`,
-    );
+    console.log(`Bot received text: "${text}" (Step: ${session.step || "none"})`);
 
     if (session.step) {
       switch (session.step) {
@@ -186,9 +178,7 @@ function setupBotLogic(bot: Telegraf<MyContext>) {
         case "occupation":
           session.contactData.occupation = text;
           session.step = "status";
-          ctx.reply(
-            `Status (convo, pray, gospel, exchange contact, salvation)?`,
-          );
+          ctx.reply(`Status (convo, pray, gospel, exchange contact, salvation)?`);
           break;
         case "status":
           session.contactData.status = normalizeStatus(text);
@@ -197,6 +187,9 @@ function setupBotLogic(bot: Telegraf<MyContext>) {
           break;
         case "highPriority":
           session.contactData.highPriority = text.toLowerCase().startsWith("y");
+          if (session.contactData.highPriority && !session.contactData.status.includes('high-priority')) {
+            session.contactData.status.push('high-priority');
+          }
           session.step = "socialMedia";
           ctx.reply("Social Media Handle / Contact Point?");
           break;
@@ -210,9 +203,7 @@ function setupBotLogic(bot: Telegraf<MyContext>) {
           const id = Date.now().toString();
           const row = formatContactRow(id, session.contactData);
           await appendSheetData(row);
-          ctx.reply(
-            `Added ${session.contactData.name} to ${session.contactData.status || STAGES[0]}! ${session.contactData.highPriority ? "(High Priority)" : ""}`,
-          );
+          ctx.reply(`Added ${session.contactData.name} to ${session.contactData.status?.join(', ') || STAGES[0]}! ${session.contactData.highPriority ? "(High Priority)" : ""}`);
           delete session.step;
           delete session.contactData;
           break;
@@ -221,13 +212,10 @@ function setupBotLogic(bot: Telegraf<MyContext>) {
       // Try simple comma parsing
       const data = parseCommaSeparated(text);
       try {
-        const id =
-          Date.now().toString() + "-" + Math.floor(Math.random() * 1000);
+        const id = Date.now().toString() + "-" + Math.floor(Math.random() * 1000);
         const row = formatContactRow(id, data);
         await appendSheetData(row);
-        ctx.reply(
-          `Added: ${data.name} to ${data.status || STAGES[0]}! ${data.highPriority ? "(High Priority)" : ""}`,
-        );
+        ctx.reply(`Added: ${data.name} to ${data.status?.join(', ') || STAGES[0]}! ${data.highPriority ? "(High Priority)" : ""}`);
       } catch (e: any) {
         console.error("Error saving data:", e.message);
         ctx.reply("Error saving to sheet. Please check your configuration.");
@@ -241,31 +229,26 @@ export function launchBot() {
   if (!bot) return;
 
   if (process.env.NODE_ENV === "production" && process.env.APP_URL) {
-    const baseUrl = process.env.APP_URL.trim().endsWith("/")
-      ? process.env.APP_URL.trim().slice(0, -1)
+    const baseUrl = process.env.APP_URL.trim().endsWith("/") 
+      ? process.env.APP_URL.trim().slice(0, -1) 
       : process.env.APP_URL.trim();
     const webhookUrl = `${baseUrl}${WEBHOOK_PATH}`;
-
+    
     console.log(`[Telegram] Attempting to set webhook to: ${webhookUrl}`);
-
-    bot.telegram
-      .setWebhook(webhookUrl, {
-        drop_pending_updates: true, // Clears any old messages that were stuck
-      })
-      .then((result) => {
-        console.log(`[Telegram] Webhook set successfully: ${result}`);
-      })
-      .catch((err) => {
-        console.error("[Telegram] CRITICAL: Failed to set webhook:", err);
-      });
+    
+    bot.telegram.setWebhook(webhookUrl, {
+      drop_pending_updates: true // Clears any old messages that were stuck
+    }).then((result) => {
+      console.log(`[Telegram] Webhook set successfully: ${result}`);
+    }).catch(err => {
+      console.error("[Telegram] CRITICAL: Failed to set webhook:", err);
+    });
   } else {
     if (process.env.NODE_ENV === "production") {
-      console.warn(
-        "WARNING: APP_URL is missing in production. Falling back to Polling mode. This is NOT recommended for serverless environments like Cloud Run.",
-      );
+      console.warn("WARNING: APP_URL is missing in production. Falling back to Polling mode. This is NOT recommended for serverless environments like Cloud Run.");
     }
     console.log("Starting Telegram Bot in Polling mode");
-    bot.launch().catch((err) => {
+    bot.launch().catch(err => {
       console.error("Error launching bot in polling mode:", err);
     });
   }

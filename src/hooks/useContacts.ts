@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Contact } from '../types';
 
 export function useContacts() {
@@ -40,8 +42,32 @@ export function useContacts() {
   }, []);
 
   useEffect(() => {
+    // Initial fetch from API to ensure we have the latest from Sheets
     fetchContacts();
 
+    // Set up Firestore real-time listener
+    const q = query(collection(db, 'contacts'), orderBy('updatedAt', 'desc'));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const firestoreContacts: Contact[] = [];
+      snapshot.forEach((doc) => {
+        firestoreContacts.push(doc.data() as Contact);
+      });
+      
+      if (firestoreContacts.length > 0) {
+        setContacts(prev => {
+          // Merge logic: prefer Firestore data if it's newer or if we don't have it
+          // But since server.ts syncs Sheets -> Firestore, Firestore should be the latest
+          return firestoreContacts;
+        });
+        setLastSynced(new Date());
+        setHasPendingUpdate(false);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'contacts');
+    });
+
+    // Keep WebSocket for now as a fallback for non-Firestore updates if any
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}`;
     const ws = new WebSocket(wsUrl);
@@ -50,6 +76,7 @@ export function useContacts() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'UPDATE_CONTACTS') {
+          // If Firestore is working, we might not need this, but it doesn't hurt
           setHasPendingUpdate(true);
         }
       } catch (e) {
@@ -57,8 +84,11 @@ export function useContacts() {
       }
     };
 
-    return () => ws.close();
-  }, []);
+    return () => {
+      unsubscribe();
+      ws.close();
+    };
+  }, [fetchContacts]);
 
   const clearDeprecated = async () => {
     setIsClearing(true);

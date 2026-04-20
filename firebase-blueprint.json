@@ -1,0 +1,33 @@
+{
+  "entities": {
+    "Contact": {
+      "title": "Contact",
+      "description": "A street contact entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier" },
+        "name": { "type": "string", "description": "Full name" },
+        "gender": { "type": "string", "description": "Gender" },
+        "teamMember": { "type": "string", "description": "Assigned team member" },
+        "age": { "type": "string", "description": "Age or age range" },
+        "remarks": { "type": "string", "description": "Notes and remarks" },
+        "occupation": { "type": "string", "description": "Occupation" },
+        "status": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "List of statuses" 
+        },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "ISO timestamp of last update" },
+        "highPriority": { "type": "boolean", "description": "Priority flag" },
+        "socialMedia": { "type": "string", "description": "Social media handle or contact point" }
+      },
+      "required": ["id", "name", "status", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/contacts/{contactId}": {
+      "schema": "Contact",
+      "description": "Global collection of contacts"
+    }
+  }
+}
