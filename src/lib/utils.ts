@@ -22,12 +22,13 @@ export function getHighestStatus(statuses: string[] | string) {
   const statusList = Array.isArray(statuses) ? statuses : [statuses];
   if (statusList.length === 0) return 'convo';
   
-  // Find the status with the highest index in STAGES
+  // Find the status with the highest index in STAGES (convo is 0, high-priority is 5)
   let highestIndex = -1;
   let highestStatus = STAGES[0];
 
   statusList.forEach(s => {
-    const index = STAGES.indexOf(s.toLowerCase().trim());
+    const cleanStatus = s.toLowerCase().trim();
+    const index = STAGES.indexOf(cleanStatus);
     if (index > highestIndex) {
       highestIndex = index;
       highestStatus = s;
@@ -48,4 +49,40 @@ export function filterContactsByColumn(contacts: Contact[], columnId: string) {
     const highestStatus = getHighestStatus(c.status);
     return highestStatus.toLowerCase().trim() === colId;
   });
+}
+
+export type SocialPlatform = 'instagram' | 'line' | 'whatsapp' | 'telegram' | 'other';
+
+export function parseSocialMedia(raw: string): { platform: SocialPlatform; handle: string } {
+  if (!raw || raw === '-') return { platform: 'other', handle: '' };
+  
+  const platforms: SocialPlatform[] = ['instagram', 'line', 'whatsapp', 'telegram'];
+  for (const p of platforms) {
+    if (raw.startsWith(`${p}:`)) {
+      return { platform: p, handle: raw.replace(`${p}:`, '') };
+    }
+  }
+  
+  return { platform: 'other', handle: raw };
+}
+
+export function getSocialLink(platform: SocialPlatform, handle: string): string {
+  if (!handle) return '';
+  const cleanHandle = handle.trim().replace(/^@/, '');
+  
+  switch (platform) {
+    case 'instagram':
+      return `https://instagram.com/${cleanHandle}`;
+    case 'line':
+      return `https://line.me/ti/p/~${cleanHandle}`;
+    case 'whatsapp':
+      // Ensure phone number has country code, default to +65 (Singapore) if it looks like a local number
+      let phone = cleanHandle.replace(/\D/g, '');
+      if (phone.length === 8) phone = `65${phone}`;
+      return `https://wa.me/${phone}`;
+    case 'telegram':
+      return `https://t.me/${cleanHandle}`;
+    default:
+      return '';
+  }
 }

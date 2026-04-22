@@ -1,9 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Contact } from '../types';
-import { COLUMNS } from '../constants';
-
-import { STAGES } from '../constants';
+import { COLUMNS, STAGES } from '../constants';
+import { parseSocialMedia, SocialPlatform } from '../lib/utils';
 
 interface ContactModalProps {
   isOpen: boolean;
@@ -14,6 +13,16 @@ interface ContactModalProps {
 }
 
 export function ContactModal({ isOpen, onClose, editingContact, onSave, isSaving }: ContactModalProps) {
+  const [socialState, setSocialState] = useState<{ platform: SocialPlatform; handle: string }>({ platform: 'other', handle: '' });
+
+  useEffect(() => {
+    if (editingContact) {
+      setSocialState(parseSocialMedia(editingContact.socialMedia));
+    } else {
+      setSocialState({ platform: 'other', handle: '' });
+    }
+  }, [editingContact, isOpen]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -36,6 +45,8 @@ export function ContactModal({ isOpen, onClose, editingContact, onSave, isSaving
                 {editingContact ? 'Edit Contact' : 'New Contact Entry'}
               </h2>
               <form onSubmit={onSave} className="space-y-3">
+                <input type="hidden" name="socialMedia" value={socialState.platform === 'other' ? socialState.handle : `${socialState.platform}:${socialState.handle}`} />
+                
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase tracking-wider font-bold opacity-50">Full Name</label>
@@ -43,29 +54,26 @@ export function ContactModal({ isOpen, onClose, editingContact, onSave, isSaving
                       name="name"
                       defaultValue={editingContact?.name}
                       required
-                      className="w-full bg-[#F5F5F0] border-none rounded-xl px-4 py-2 focus:ring-2 ring-[#141414]/10 outline-none"
+                      className="w-full bg-[#F5F5F0] border-none rounded-xl px-4 py-2 text-sm focus:ring-2 ring-[#141414]/10 outline-none"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold opacity-50">Gender</label>
-                    <select
-                      name="gender"
-                      defaultValue={editingContact?.gender || ""}
-                      className="w-full bg-[#F5F5F0] border-none rounded-xl px-4 py-2 focus:ring-2 ring-[#141414]/10 outline-none"
-                    >
-                      <option value="" disabled>Select Gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                    </select>
+                    <label className="text-[10px] uppercase tracking-wider font-bold opacity-50">Occupation</label>
+                    <input
+                      name="occupation"
+                      defaultValue={editingContact?.occupation}
+                      className="w-full bg-[#F5F5F0] border-none rounded-xl px-4 py-2 text-sm focus:ring-2 ring-[#141414]/10 outline-none"
+                    />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+
+                <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold opacity-50">Team Member</label>
+                    <label className="text-[10px] uppercase tracking-wider font-bold opacity-50">Team</label>
                     <select
                       name="teamMember"
                       defaultValue={editingContact?.teamMember || 'Kenny'}
-                      className="w-full bg-[#F5F5F0] border-none rounded-xl px-4 py-2 focus:ring-2 ring-[#141414]/10 outline-none"
+                      className="w-full bg-[#F5F5F0] border-none rounded-xl px-3 py-2 text-sm focus:ring-2 ring-[#141414]/10 outline-none"
                     >
                       <option value="Kenny">Kenny</option>
                       <option value="Jermaine">Jermaine</option>
@@ -74,33 +82,53 @@ export function ContactModal({ isOpen, onClose, editingContact, onSave, isSaving
                     </select>
                   </div>
                   <div className="space-y-1">
+                    <label className="text-[10px] uppercase tracking-wider font-bold opacity-50">Gender</label>
+                    <select
+                      name="gender"
+                      defaultValue={editingContact?.gender || ""}
+                      className="w-full bg-[#F5F5F0] border-none rounded-xl px-3 py-2 text-sm focus:ring-2 ring-[#141414]/10 outline-none"
+                    >
+                      <option value="" disabled>Select</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
                     <label className="text-[10px] uppercase tracking-wider font-bold opacity-50">Age</label>
                     <input
                       name="age"
                       defaultValue={editingContact?.age}
-                      className="w-full bg-[#F5F5F0] border-none rounded-xl px-4 py-2 focus:ring-2 ring-[#141414]/10 outline-none"
+                      className="w-full bg-[#F5F5F0] border-none rounded-xl px-3 py-2 text-sm focus:ring-2 ring-[#141414]/10 outline-none"
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold opacity-50">Occupation</label>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider font-bold opacity-50">Social Media / Follow-up</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={socialState.platform}
+                      onChange={(e) => setSocialState(prev => ({ ...prev, platform: e.target.value as SocialPlatform }))}
+                      className="w-1/3 bg-[#F5F5F0] border-none rounded-xl px-3 py-2 text-xs focus:ring-2 ring-[#141414]/10 outline-none"
+                    >
+                      <option value="instagram">Instagram</option>
+                      <option value="line">Line</option>
+                      <option value="whatsapp">WhatsApp</option>
+                      <option value="telegram">Telegram</option>
+                      <option value="other">Other/Text</option>
+                    </select>
                     <input
-                      name="occupation"
-                      defaultValue={editingContact?.occupation}
-                      className="w-full bg-[#F5F5F0] border-none rounded-xl px-4 py-2 focus:ring-2 ring-[#141414]/10 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider font-bold opacity-50"> Contact</label>
-                    <input
-                      name="socialMedia"
-                      defaultValue={editingContact?.socialMedia}
-                      placeholder="@handle or phone"
-                      className="w-full bg-[#F5F5F0] border-none rounded-xl px-4 py-2 focus:ring-2 ring-[#141414]/10 outline-none"
+                      value={socialState.handle}
+                      onChange={(e) => setSocialState(prev => ({ ...prev, handle: e.target.value }))}
+                      placeholder={
+                        socialState.platform === 'whatsapp' ? 'Phone Number' : 
+                        socialState.platform === 'other' ? '@handle or details' : 'Username'
+                      }
+                      className="flex-1 bg-[#F5F5F0] border-none rounded-xl px-4 py-2 text-xs focus:ring-2 ring-[#141414]/10 outline-none"
                     />
                   </div>
                 </div>
+
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase tracking-wider font-bold opacity-50">Status (Select all that apply)</label>
                   <div className="grid grid-cols-3 gap-1.5">

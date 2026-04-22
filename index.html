@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Street Contact Dashboard</title>
+    <script>
+      // Suppress benign Vite WebSocket and environment errors that clutter the console/UI
+      window.addEventListener('unhandledrejection', (event) => {
+        if (event.reason && (
+          event.reason.message?.includes('WebSocket') || 
+          event.reason.message?.includes('HMR') ||
+          event.reason === 'WebSocket closed without opened.'
+        )) {
+          event.preventDefault();
+          console.warn('Suppressed benign environment error:', event.reason);
+        }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,6 +1,6 @@
 import React from 'react';
-import { User, Briefcase, Users, Calendar, MessageSquare, Edit2, Trash2 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { User, Briefcase, Users, Calendar, MessageSquare, Edit2, Trash2, Instagram, MessageCircle, Send, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { cn, parseSocialMedia, getSocialLink } from '../lib/utils';
 import { Contact } from '../types';
 
 interface ContactCardProps {
@@ -12,7 +12,30 @@ interface ContactCardProps {
   isNew?: boolean;
 }
 
-export function ContactCard({ contact, isOverlay, onEdit, onDelete, isNew }: ContactCardProps) {
+export const ContactCard = React.memo(({ contact, isOverlay, onEdit, onDelete, isNew }: ContactCardProps) => {
+  const { platform, handle } = parseSocialMedia(contact.socialMedia);
+  const socialLink = getSocialLink(platform, handle);
+
+  const renderSocialIcon = () => {
+    switch (platform) {
+      case 'instagram':
+        return <Instagram size={10} className="text-pink-600" />;
+      case 'line':
+        return <MessageCircle size={10} className="text-emerald-500" />;
+      case 'whatsapp':
+        return <MessageCircle size={10} className="text-green-600" />;
+      case 'telegram':
+        return <Send size={10} className="text-sky-500" />;
+      default:
+        return <LinkIcon size={10} className="opacity-50" />;
+    }
+  };
+
+  const getPlatformLabel = () => {
+    if (platform === 'other') return handle || '-';
+    return `${platform.charAt(0).toUpperCase() + platform.slice(1)}: ${handle}`;
+  };
+
   return (
     <div
       className={cn(
@@ -59,11 +82,23 @@ export function ContactCard({ contact, isOverlay, onEdit, onDelete, isNew }: Con
             <Calendar size={10} className="opacity-30" />
             {contact.age || 'N/A'}
           </div>
-          {contact.socialMedia && contact.socialMedia !== '-' && (
-            <div className="flex items-center gap-1 text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-lg font-medium">
-              <MessageSquare size={10} className="opacity-50" />
-              {contact.socialMedia}
-            </div>
+          {handle && (
+            <a 
+              href={socialLink || '#'} 
+              target={socialLink ? "_blank" : undefined}
+              rel={socialLink ? "noopener noreferrer" : undefined}
+              onClick={(e) => !socialLink && e.preventDefault()}
+              className={cn(
+                "flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-lg font-medium transition-all group/link",
+                socialLink 
+                  ? "bg-indigo-50 text-indigo-600 hover:bg-indigo-100" 
+                  : "bg-[#141414]/[0.03] text-[#141414]/60"
+              )}
+            >
+              {renderSocialIcon()}
+              {getPlatformLabel()}
+              {socialLink && <ExternalLink size={8} className="opacity-0 group-hover/link:opacity-100 transition-opacity ml-0.5" />}
+            </a>
           )}
         </div>
       </div>
@@ -118,4 +153,4 @@ export function ContactCard({ contact, isOverlay, onEdit, onDelete, isNew }: Con
       </div>
     </div>
   );
-}
+});

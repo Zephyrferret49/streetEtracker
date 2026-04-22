@@ -248,8 +248,14 @@ export function launchBot() {
       console.warn("WARNING: APP_URL is missing in production. Falling back to Polling mode. This is NOT recommended for serverless environments like Cloud Run.");
     }
     console.log("Starting Telegram Bot in Polling mode");
-    bot.launch().catch(err => {
-      console.error("Error launching bot in polling mode:", err);
+    bot.launch({
+      dropPendingUpdates: true
+    }).catch(err => {
+      if (err.message?.includes('409') || err.description?.includes('409')) {
+        console.warn("[Telegram] CONFLICT (409): The bot token is likely in use by another instance (e.g., your production CLI deploy). Polling is disabled to avoid interference.");
+      } else {
+        console.error("[Telegram] Error launching bot in polling mode:", err);
+      }
     });
   }
 }

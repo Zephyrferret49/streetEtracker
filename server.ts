@@ -4,7 +4,6 @@ import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { WebSocketServer, WebSocket } from "ws";
 import { STAGES } from "./src/constants.js";
 import { 
   SPREADSHEET_ID, 
@@ -139,26 +138,6 @@ console.log("APP_URL:", process.env.APP_URL);
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-// --- WebSocket Setup ---
-const wss = new WebSocketServer({ noServer: true });
-
-wss.on("connection", (ws) => {
-  console.log("New WebSocket client connected. Total clients:", wss.clients.size);
-  ws.on("close", () => {
-    console.log("WebSocket client disconnected. Total clients:", wss.clients.size);
-  });
-});
-
-function broadcastUpdate() {
-  console.log("Broadcasting update to", wss.clients.size, "clients");
-  const message = JSON.stringify({ type: "UPDATE_CONTACTS" });
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
-  });
-}
-
 function mapRowToContact(row: any[]) {
   const statusStr = row[7] || STAGES[0];
   let status = statusStr.split(',').map((s: string) => s.trim()).filter(Boolean);
@@ -200,9 +179,8 @@ async function fetchAndSyncContacts() {
   }
 }
 
-// Connect Sheets updates to WebSocket broadcast and Firebase sync
+// Connect Sheets updates to Firebase sync
 setOnUpdate(async () => {
-  broadcastUpdate();
   await fetchAndSyncContacts();
 });
 
@@ -410,10 +388,4 @@ if (process.env.NODE_ENV === "production") {
 
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on http://localhost:${PORT}`);
-});
-
-server.on("upgrade", (request, socket, head) => {
-  wss.handleUpgrade(request, socket, head, (ws) => {
-    wss.emit("connection", ws, request);
-  });
 });
